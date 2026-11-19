@@ -1,0 +1,28 @@
+# Python 运行与构建产物
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+venv/
+.venv/
+
+# 函数代码包：由 src/functions/build_packages.py 生成，随部署脚本上传，不入库
+src/functions/build/
+
+# Terraform 本地状态与临时文件
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+crash.*.log
+infra/terraform.tfvars
+
+# 编辑器与系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

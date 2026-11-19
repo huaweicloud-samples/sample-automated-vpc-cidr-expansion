@@ -1,0 +1,121 @@
+# =============================================================================
+# 输入示例：复制为 terraform.tfvars 后按自己的环境填写
+#
+# 凭据不要写进本文件：在 shell 中导出 HW_ACCESS_KEY / HW_SECRET_KEY
+# （临时安全令牌另加 HW_SECURITY_TOKEN），provider 会自动读取。
+#
+# 尖括号包裹的项必须替换，本栈不代为取值。
+# =============================================================================
+
+region      = "cn-north-4"
+name_prefix = "vpc-cidr-expansion"
+
+# 接收扩容结果的邮箱；主题订阅创建后需在邮件中点击确认，否则收不到通知
+notification_email = "ops@example.com"
+
+# -----------------------------------------------------------------------------
+# 地址规划：主网段 + 预留的附加网段候选（按优先级排序）
+# 附加网段必须与主网段、已用附加网段、现有子网都不重叠
+# -----------------------------------------------------------------------------
+
+vpc_cidr              = "10.0.0.0/16"
+planned_secondary_cidrs = ["10.1.0.0/16", "10.2.0.0/16"]
+secondary_cidr_max_count = 8
+expansion_subnet_netmask = 24
+
+# 基线子网：expandable = true 的层级才会被扩容函数追加子网
+availability_zones = ["cn-north-4a", "cn-north-4b", "cn-north-4c"]
+
+baseline_subnets = [
+  { name = "public-1", cidr = "10.0.1.0/24", az = "cn-north-4a", tier = "public", expandable = true },
+  { name = "public-2", cidr = "10.0.2.0/24", az = "cn-north-4b", tier = "public", expandable = true },
+  { name = "app-private-1", cidr = "10.0.10.0/24", az = "cn-north-4a", tier = "private", expandable = true },
+  { name = "app-private-2", cidr = "10.0.11.0/24", az = "cn-north-4b", tier = "private", expandable = true },
+  { name = "ops-private-1", cidr = "10.0.20.0/24", az = "cn-north-4a", tier = "ops", expandable = true },
+  { name = "data-private-1", cidr = "10.0.30.0/24", az = "cn-north-4b", tier = "data", expandable = false },
+  { name = "svc-private-1", cidr = "10.0.40.0/24", az = "cn-north-4b", tier = "svc", expandable = false },
+]
+
+# 状态存储与函数各落在哪个基线子网（取上面 name 字段值）
+geminidb_data_subnet_name = "data-private-1"
+function_subnet_name      = "svc-private-1"
+
+# -----------------------------------------------------------------------------
+# 触发与阈值
+#   monitor_cron：6 段 Cron（秒 分 时 日 月 周），「周」与「日」不能同时为 *
+#   utilization_threshold 触发扩容，warning_threshold 是扩容侧的二次校验下限
+# -----------------------------------------------------------------------------
+
+monitor_cron          = "0 */5 * * * ?"
+trigger_enabled       = true
+utilization_threshold = 85
+warning_threshold     = 80
+monitor_tag_key       = "MonitorCIDR"
+monitor_tag_value     = "true"
+
+# -----------------------------------------------------------------------------
+# 状态存储：规格码与接口版本随区域上架情况变化，须自行实查后填入
+#   规格码  → 控制台「GeminiDB → 购买」的实例规格列表；
+#             huaweicloud_geminidb_available_flavors 数据源要求传入已存在实例的
+#             instance_id，只能回答「这台实例还能选什么」，不能在首次购买前取规格码
+#   接口版本 → 目标区域已上架的 DynamoDB 兼容接口版本
+#   资源类型 → postPaid 或 prePaid
+# -----------------------------------------------------------------------------
+
+geminidb_spec_code      = "<GEMINIDB_SPEC_CODE>"
+geminidb_engine_version = "<GEMINIDB_DDB_INTERFACE_VERSION>"
+geminidb_node_count     = 3
+geminidb_volume_size    = 100
+geminidb_volume_type    = "ultra"
+geminidb_charging_mode  = "postPaid"
+
+# 口令不要落盘到仓库：从环境变量或交互式输入注入
+geminidb_password = "<GEMINIDB_PASSWORD>"
+
+# -----------------------------------------------------------------------------
+# 自定义指标与大盘
+#   命名空间须为 service.item 格式（仅字母、数字与下划线，3-32 字符，禁连字符）
+#   view: bar | line | bar_chart | table | circular_bar | area_chart
+#   metric_display_mode: single | multiple
+#   filter_type: all_instances | specific_instances
+#     选 specific_instances 时同时填 dashboard_dimension_value = <VPC 标识>
+# -----------------------------------------------------------------------------
+
+ces_metric_namespace            = "vpc_cidr_expansion.custom"
+metric_dimension_name           = "VpcId"
+enable_dashboard                = true
+dashboard_widget_view           = "line"
+dashboard_metric_display_mode   = "single"
+dashboard_dimension_filter_type = "all_instances"
+
+# -----------------------------------------------------------------------------
+# 函数：入口格式为 <模块名>.<函数名>，须与代码包内的实现一致
+# -----------------------------------------------------------------------------
+
+function_runtime   = "Python3.9"
+monitor_handler    = "index.main_handler"
+expansion_handler  = "index.main_handler"
+monitor_package    = "../src/functions/build/cidr-monitor.zip"
+expansion_package  = "../src/functions/build/cidr-expansion.zip"
+
+# -----------------------------------------------------------------------------
+# 函数运行权限委托：角色名须与 IAM 权限列表一致，且按全局级 / 项目级分开放置
+# -----------------------------------------------------------------------------
+
+agency_domain_roles = [
+  "OBS Administrator",
+  "KMS CMK Decrypter",
+]
+
+agency_project_roles = [
+  "VPC FullAccess",
+  "FunctionGraph FullAccess",
+  "SMN FullAccess",
+  "CES FullAccess",
+  "GeminiDB FullAccess",
+  "LTS FullAccess",
+]
+
+tags = {
+  ManagedBy = "vpc-cidr-automation"
+}
